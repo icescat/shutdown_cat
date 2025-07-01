@@ -1,0 +1,36 @@
+#include <windows.h>
+#include "resource.h"
+
+// 定义图标资源  
+1 ICON "cat_icon.ico"
+2 ICON "cat_tray.ico"
+
+// 版本信息
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "Shutdown Cat Studio"
+            VALUE "FileDescription", "Shutdown Cat - Timer Shutdown Tool"
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", "shutdown_cat"
+            VALUE "LegalCopyright", "Copyright (C) 2024"
+            VALUE "OriginalFilename", "shutdown_cat.exe"
+            VALUE "ProductName", "Shutdown Cat"
+            VALUE "ProductVersion", "1.0.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END 
