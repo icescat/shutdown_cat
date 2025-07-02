@@ -35,6 +35,12 @@
 #define ID_HELP_DIALOG 4001
 #define ID_HELP_OK 4002
 
+// UpDown控件ID
+#define ID_UPDOWN_HOUR 5001
+#define ID_UPDOWN_MINUTE 5002
+#define ID_UPDOWN_HOURS 5003
+#define ID_UPDOWN_MINUTES 5004
+
 // 现代Windows风格颜色定义
 #define COLOR_BG            RGB(240, 240, 240)  // #f0f0f0
 #define COLOR_TITLEBAR      RGB(0, 120, 212)    // #0078d4
@@ -50,31 +56,30 @@
 #define COLOR_TIME_DISPLAY  RGB(0, 0, 0)        // 黑色背景
 #define COLOR_TIME_TEXT     RGB(0, 255, 0)      // 绿色文字
 
-// 帮助文本常量
 static const wchar_t HELP_TEXT[] = 
-    L"关机猫v1.0,一个简单好用的Windows定时关机程序\n"
-    L"本应用支持Windows XP及以上版本\n\n"
+    L"关机猫,一个简单好用的定时关机程序\n"
+    L"支持Windows XP及以上版本\n\n"
     L"【定时关机】\n"
-    L"• 设定具体时间点关机（如22:30）\n"
-    L"• 24小时制，如果时间已过则为明天\n\n"
+    L"• 设定具体时间点关机（如22:30），可跨日\n\n"
     L"【倒计时关机】\n"
-    L"• 设定多少时间后关机（如1小时30分）\n"
-    L"• 最长支持24小时倒计时\n\n"
-    L"【桌面倒计时显示窗】\n"
+    L"• 设定多少时间后关机（如1小时30分）\n\n"
+    L"【桌面倒计时】\n"
     L"• 定时开始后桌面右下角显示半透明倒计时\n"
     L"• 可拖拽移动位置，右键显示菜单\n\n"
     L"【系统托盘】\n"
-    L"• 定时开始后可以最小化到托盘\n"
+    L"• 定时开始后自动最小化到托盘\n"
     L"• 左键托盘图标打开主界面\n"
     L"• 右键托盘图标显示快捷菜单\n\n"
-    L"⚠️ 注意：\n"
+    L"注意：\n"
     L"• 停止计时才能关闭程序\n"
     L"• 系统会在最后60秒显示关机倒计时提示框\n"
     L"• 建议不要超过24小时，程序会自动验证输入范围\n\n"
-    L"作者：喵言喵语 by.52pojie";
+    L"版本：V2.0 作者：喵言喵语 by.52pojie";
 
 // 全局变量
 HWND hWnd, hCheckScheduled, hCheckCountdown, hEditHour, hEditMinute, hEditHours, hEditMinutes, hButtonStart, hButtonCancel, hButtonHelp, hTimeDisplay, hDesktopTimer = NULL;
+HWND hUpDownHour, hUpDownMinute, hUpDownHours, hUpDownMinutes;
+WNDPROC OriginalEditProc;
 BOOL useScheduled = FALSE, useCountdown = TRUE, isTimerActive = FALSE, isInTray = FALSE, showDesktopTimer = FALSE;
 time_t shutdownTime = 0;
 NOTIFYICONDATA nid;
@@ -95,6 +100,11 @@ void CreateDesktopTimer();
 void DestroyDesktopTimer();
 void UpdateDesktopTimer(int totalSeconds);
 LRESULT CALLBACK DesktopTimerProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+// 数值输入框增减函数
+void AdjustEditValue(HWND hEdit, int delta, int minVal, int maxVal);
+void HandleMouseWheel(HWND hwnd, WPARAM wParam, LPARAM lParam);
+LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam);
 
 
 // 创建系统默认字体
@@ -211,6 +221,40 @@ void DrawModernButton(HDC hdc, RECT rect, LPCWSTR text, BOOL isPressed, BOOL isH
     SetTextColor(hdc, textColor);
     SelectObject(hdc, hFont);
     DrawText(hdc, text, -1, &rect, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+}
+
+void AdjustEditValue(HWND hEdit, int delta, int minVal, int maxVal) {
+    WCHAR buf[10];
+    GetWindowText(hEdit, buf, 10);
+    int val = _wtoi(buf) + delta;
+    if (val < minVal) val = minVal;
+    if (val > maxVal) val = maxVal;
+    swprintf(buf, 10, L"%d", val);
+    SetWindowText(hEdit, buf);
+}
+
+void HandleMouseWheel(HWND hwnd, WPARAM wParam, LPARAM lParam) {
+    POINT pt = {LOWORD(lParam), HIWORD(lParam)};
+    ScreenToClient(hWnd, &pt);
+    HWND hChild = ChildWindowFromPoint(hWnd, pt);
+    if (!hChild) return;
+    int delta = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1 : -1;
+    if (hChild == hEditHour) AdjustEditValue(hEditHour, delta, 0, 23);
+    else if (hChild == hEditMinute) AdjustEditValue(hEditMinute, delta, 0, 59);
+    else if (hChild == hEditHours) AdjustEditValue(hEditHours, delta, 0, 23);
+    else if (hChild == hEditMinutes) AdjustEditValue(hEditMinutes, delta, 0, 59);
+}
+
+LRESULT CALLBACK EditSubclassProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    if (uMsg == WM_MOUSEWHEEL) {
+        int delta = GET_WHEEL_DELTA_WPARAM(wParam) > 0 ? 1 : -1;
+        if (hwnd == hEditHour) AdjustEditValue(hEditHour, delta, 0, 23);
+        else if (hwnd == hEditMinute) AdjustEditValue(hEditMinute, delta, 0, 59);
+        else if (hwnd == hEditHours) AdjustEditValue(hEditHours, delta, 0, 23);
+        else if (hwnd == hEditMinutes) AdjustEditValue(hEditMinutes, delta, 0, 59);
+        return 0;
+    }
+    return CallWindowProc(OriginalEditProc, hwnd, uMsg, wParam, lParam);
 }
 
 // 简洁的浮动帮助按钮
@@ -736,19 +780,33 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             // 定时关机时间输入
             hEditHour = CreateWindow(L"EDIT", L"22", 
                                    WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER | ES_CENTER,
-                                   35, 45, 50, 22, hwnd, (HMENU)ID_EDIT_HOUR, NULL, NULL);
+                                   35, 45, 55, 22, hwnd, (HMENU)ID_EDIT_HOUR, NULL, NULL);
             SetControlFont(hEditHour, hFont);
             
+            hUpDownHour = CreateWindow(UPDOWN_CLASS, NULL,
+                                     WS_VISIBLE | WS_CHILD | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS,
+                                     0, 0, 0, 0, hwnd, (HMENU)ID_UPDOWN_HOUR, NULL, NULL);
+            SendMessage(hUpDownHour, UDM_SETBUDDY, (WPARAM)hEditHour, 0);
+            SendMessage(hUpDownHour, UDM_SETRANGE, 0, MAKELPARAM(23, 0));
+            SendMessage(hUpDownHour, UDM_SETPOS, 0, 22);
+            
             CreateWindow(L"STATIC", L":", WS_VISIBLE | WS_CHILD | SS_CENTER,
-                        90, 47, 10, 18, hwnd, NULL, NULL, NULL);
+                        101, 47, 10, 18, hwnd, NULL, NULL, NULL);
             
             hEditMinute = CreateWindow(L"EDIT", L"00", 
                                      WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER | ES_CENTER,
-                                     105, 45, 50, 22, hwnd, (HMENU)ID_EDIT_MINUTE, NULL, NULL);
+                                     118, 45, 55, 22, hwnd, (HMENU)ID_EDIT_MINUTE, NULL, NULL);
             SetControlFont(hEditMinute, hFont);
             
+            hUpDownMinute = CreateWindow(UPDOWN_CLASS, NULL,
+                                       WS_VISIBLE | WS_CHILD | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS,
+                                       0, 0, 0, 0, hwnd, (HMENU)ID_UPDOWN_MINUTE, NULL, NULL);
+            SendMessage(hUpDownMinute, UDM_SETBUDDY, (WPARAM)hEditMinute, 0);
+            SendMessage(hUpDownMinute, UDM_SETRANGE, 0, MAKELPARAM(59, 0));
+            SendMessage(hUpDownMinute, UDM_SETPOS, 0, 0);
+            
             HWND hLabelShutdown = CreateWindow(L"STATIC", L"关机", WS_VISIBLE | WS_CHILD,
-                        165, 47, 30, 18, hwnd, NULL, NULL, NULL);
+                        181, 47, 30, 18, hwnd, NULL, NULL, NULL);
             SetControlFont(hLabelShutdown, hFont);
             
             // 分隔线1
@@ -764,20 +822,34 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             // 倒计时时间输入
             hEditHours = CreateWindow(L"EDIT", L"1", 
                                     WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER | ES_CENTER,
-                                    35, 120, 40, 22, hwnd, (HMENU)ID_EDIT_HOURS, NULL, NULL);
+                                    35, 120, 55, 22, hwnd, (HMENU)ID_EDIT_HOURS, NULL, NULL);
             SetControlFont(hEditHours, hFont);
             
+            hUpDownHours = CreateWindow(UPDOWN_CLASS, NULL,
+                                      WS_VISIBLE | WS_CHILD | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS,
+                                      0, 0, 0, 0, hwnd, (HMENU)ID_UPDOWN_HOURS, NULL, NULL);
+            SendMessage(hUpDownHours, UDM_SETBUDDY, (WPARAM)hEditHours, 0);
+            SendMessage(hUpDownHours, UDM_SETRANGE, 0, MAKELPARAM(23, 0));
+            SendMessage(hUpDownHours, UDM_SETPOS, 0, 1);
+            
             HWND hLabelHour = CreateWindow(L"STATIC", L"时", WS_VISIBLE | WS_CHILD,
-                        80, 122, 15, 18, hwnd, NULL, NULL, NULL);
+                        98, 122, 15, 18, hwnd, NULL, NULL, NULL);
             SetControlFont(hLabelHour, hFont);
             
             hEditMinutes = CreateWindow(L"EDIT", L"0", 
                                       WS_VISIBLE | WS_CHILD | WS_BORDER | ES_NUMBER | ES_CENTER,
-                                      100, 120, 40, 22, hwnd, (HMENU)ID_EDIT_MINUTES, NULL, NULL);
+                                      118, 120, 55, 22, hwnd, (HMENU)ID_EDIT_MINUTES, NULL, NULL);
             SetControlFont(hEditMinutes, hFont);
             
+            hUpDownMinutes = CreateWindow(UPDOWN_CLASS, NULL,
+                                        WS_VISIBLE | WS_CHILD | UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_ARROWKEYS | UDS_NOTHOUSANDS,
+                                        0, 0, 0, 0, hwnd, (HMENU)ID_UPDOWN_MINUTES, NULL, NULL);
+            SendMessage(hUpDownMinutes, UDM_SETBUDDY, (WPARAM)hEditMinutes, 0);
+            SendMessage(hUpDownMinutes, UDM_SETRANGE, 0, MAKELPARAM(59, 0));
+            SendMessage(hUpDownMinutes, UDM_SETPOS, 0, 0);
+            
             HWND hLabelMinute = CreateWindow(L"STATIC", L"分", WS_VISIBLE | WS_CHILD,
-                        145, 122, 15, 18, hwnd, NULL, NULL, NULL);
+                        181, 122, 15, 18, hwnd, NULL, NULL, NULL);
             SetControlFont(hLabelMinute, hFont);
             
             // 分隔线2
@@ -816,6 +888,11 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             hButtonCancel = CreateWindow(L"ModernButton", L"取消关机", 
                                         WS_VISIBLE | WS_CHILD,
                                         176, 240, 80, 30, hwnd, (HMENU)ID_BUTTON_CANCEL, NULL, NULL);
+            
+            OriginalEditProc = (WNDPROC)SetWindowLongPtr(hEditHour, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
+            SetWindowLongPtr(hEditMinute, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
+            SetWindowLongPtr(hEditHours, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
+            SetWindowLongPtr(hEditMinutes, GWLP_WNDPROC, (LONG_PTR)EditSubclassProc);
             
             // 默认选择倒计时关机
             useCountdown = TRUE;
@@ -931,6 +1008,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
             }
             break;
         }
+        
+        case WM_MOUSEWHEEL:
+            HandleMouseWheel(hwnd, wParam, lParam);
+            return 0;
             
         case WM_COMMAND:
             switch (LOWORD(wParam)) {
@@ -1042,7 +1123,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLin
     RegisterClass(&wcDesktop);
     
     // 创建窗口 - 固定大小，不可调整，缩短宽度
-    hWnd = CreateWindow(L"ShutdownTimer", L"关机猫",
+    hWnd = CreateWindow(L"ShutdownTimer", L"关机猫 by.52pojie",
                        WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
                        CW_USEDEFAULT, CW_USEDEFAULT, 320, 320,
                        NULL, NULL, hInstance, NULL);
